@@ -1,5 +1,4 @@
 import axios, { AxiosInstance } from 'axios';
-import * as jose from 'jose';
 import { promises as fs } from 'fs';
 import { createWriteStream } from 'fs';
 import path from 'path';
@@ -115,43 +114,31 @@ export interface TaskListParams {
 }
 
 export default class KlingClient {
-  private accessKey: string;
-  private secretKey: string;
+  private apiKey: string;
   private axiosInstance: AxiosInstance;
 
-  constructor(accessKey: string, secretKey: string) {
-    this.accessKey = accessKey;
-    this.secretKey = secretKey;
+  constructor(apiKey: string) {
+    this.apiKey = apiKey;
     this.axiosInstance = axios.create({
       baseURL: 'https://api-singapore.klingai.com',
       timeout: 30000,
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.apiKey}`,
       }
     });
-    
-    // Add request interceptor to generate fresh JWT for each request
-    this.axiosInstance.interceptors.request.use(async (config) => {
-      const jwt = await this.generateJWT();
-      config.headers['Authorization'] = `Bearer ${jwt}`;
-      return config;
-    });
   }
-  
-  private async generateJWT(): Promise<string> {
-    const secret = new TextEncoder().encode(this.secretKey);
-    
-    const jwt = await new jose.SignJWT({ 
-      iss: this.accessKey,
-      exp: Math.floor(Date.now() / 1000) + (30 * 60), // 30 minutes
-      nbf: Math.floor(Date.now() / 1000) - 5 // 5 seconds ago
-    })
-      .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
-      .sign(secret);
-    
-    return jwt;
+
+  // Kling's API expects dashes in these model names (kling-v1-5, kling-v1-6),
+  // but the tool schemas use dots (kling-v1.5, kling-v1.6) to match Kling's own docs elsewhere.
+  private normalizeModelName(modelName: string): string {
+    const dotToDash: Record<string, string> = {
+      'kling-v1.5': 'kling-v1-5',
+      'kling-v1.6': 'kling-v1-6',
+    };
+    return dotToDash[modelName] || modelName;
   }
-  
+
   private async processImageUrl(url: string | undefined): Promise<string | undefined> {
     if (!url) return undefined;
     
@@ -180,7 +167,7 @@ export default class KlingClient {
       cfg_scale: request.cfg_scale || 0.8,
       aspect_ratio: request.aspect_ratio || '16:9',
       duration: request.duration || '5',
-      model_name: request.model_name || 'kling-v2-master', // V2-master is default
+      model_name: this.normalizeModelName(request.model_name || 'kling-v2-master'), // V2-master is default
       ...(request.image_url && { image_url: request.image_url }),
       ...(request.image_tail_url && { image_tail_url: request.image_tail_url }),
       ...(ref_image_url && { ref_image_url }),
@@ -218,7 +205,7 @@ export default class KlingClient {
       cfg_scale: request.cfg_scale || 0.8,
       duration: request.duration || '5',
       aspect_ratio: request.aspect_ratio || '16:9',
-      model_name: request.model_name || 'kling-v2-master', // V2-master is default
+      model_name: this.normalizeModelName(request.model_name || 'kling-v2-master'), // V2-master is default
     };
 
     try {
@@ -254,7 +241,7 @@ export default class KlingClient {
       prompt: request.prompt,
       duration: request.duration || '5',
       mode: request.mode || 'standard',
-      model_name: request.model_name || 'kling-v2-master', // V2-master is default
+      model_name: this.normalizeModelName(request.model_name || 'kling-v2-master'), // V2-master is default
     };
 
     try {
@@ -360,7 +347,7 @@ export default class KlingClient {
     };
     
     // Always add model_name
-    body.input.model_name = request.model_name || 'kling-v2-master';
+    body.input.model_name = this.normalizeModelName(request.model_name || 'kling-v2-master');
 
     try {
       const response = await this.axiosInstance.post(path, body);
@@ -389,7 +376,7 @@ export default class KlingClient {
     };
     
     // Always add model_name
-    body.model_name = request.model_name || 'kling-v2-master';
+    body.model_name = this.normalizeModelName(request.model_name || 'kling-v2-master');
 
     try {
       const response = await this.axiosInstance.post(path, body);
@@ -450,12 +437,23 @@ export default class KlingClient {
     }
   }
 
-  async getResourcePackages(): Promise<ResourcePackage[]> {
-    const path = '/v1/account/packages';
+  // Kling's real API has no dedicated balance/packages endpoints; both are
+  // derived from GET /account/costs, which lists resource packages over a time window.
+  private async queryAccountCosts(): Promise<ResourcePackage[]> {
+    const path = '/account/costs';
+    const end_time = Date.now();
+    const start_time = end_time - 365 * 24 * 60 * 60 * 1000; // look back 1 year to catch active packages
 
     try {
-      const response = await this.axiosInstance.get(path);
-      return response.data.data.resource_packages || [];
+      const response = await this.axiosInstance.get(path, { params: { start_time, end_time } });
+      const packages = response.data.data?.resource_pack_subscribe_infos || [];
+      return packages.map((pkg: any) => ({
+        resource_id: pkg.resource_pack_id,
+        name: pkg.resource_pack_name,
+        amount: pkg.remaining_quantity,
+        expire_at: new Date(pkg.invalid_time).toISOString(),
+        created_at: new Date(pkg.purchase_time).toISOString(),
+      }));
     } catch (error) {
       if (axios.isAxiosError(error)) {
         throw new Error(`Kling API error: ${error.response?.data?.message || error.message}`);
@@ -464,18 +462,14 @@ export default class KlingClient {
     }
   }
 
-  async getAccountBalance(): Promise<AccountBalance> {
-    const path = '/v1/account/balance';
+  async getResourcePackages(): Promise<ResourcePackage[]> {
+    return this.queryAccountCosts();
+  }
 
-    try {
-      const response = await this.axiosInstance.get(path);
-      return response.data.data;
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        throw new Error(`Kling API error: ${error.response?.data?.message || error.message}`);
-      }
-      throw error;
-    }
+  async getAccountBalance(): Promise<AccountBalance> {
+    const resource_packages = await this.queryAccountCosts();
+    const total_balance = resource_packages.reduce((sum, pkg) => sum + pkg.amount, 0);
+    return { total_balance, resource_packages };
   }
 
   async listTasks(params?: TaskListParams): Promise<any> {

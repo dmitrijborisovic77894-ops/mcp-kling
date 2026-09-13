@@ -11,44 +11,24 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-const KLING_ACCESS_KEY = process.env.KLING_ACCESS_KEY;
-const KLING_SECRET_KEY = process.env.KLING_SECRET_KEY;
+const KLING_API_KEY = process.env.KLING_API_KEY;
 const KLING_DOWNLOAD_PATH = process.env.KLING_DOWNLOAD_PATH; // Optional custom download path
 const KLING_AUTO_DOWNLOAD = process.env.KLING_AUTO_DOWNLOAD !== 'false'; // Default true
 
-async function generateJWT(accessKey: string, secretKey: string): Promise<string> {
-  const { SignJWT } = await import('jose');
-  const secret = new TextEncoder().encode(secretKey);
-  const currentTime = Math.floor(Date.now() / 1000);
-  
-  const jwt = await new SignJWT({ 
-    iss: accessKey,
-    exp: currentTime + 1800, // 30 minutes from now
-    nbf: currentTime - 5,     // Valid from 5 seconds ago
-  })
-    .setProtectedHeader({ alg: 'HS256', typ: 'JWT' })
-    .sign(secret);
-  
-  return jwt;
-}
-
-if (!KLING_ACCESS_KEY || !KLING_SECRET_KEY) {
-  console.error('Error: KLING_ACCESS_KEY and KLING_SECRET_KEY environment variables are required.');
-  console.error('\nPlease add them to your Claude Desktop configuration:');
+if (!KLING_API_KEY) {
+  console.error('Error: KLING_API_KEY environment variable is required.');
+  console.error('\nPlease add it to your Claude Desktop configuration:');
   console.error('"env": {');
-  console.error('  "KLING_ACCESS_KEY": "your_access_key",');
-  console.error('  "KLING_SECRET_KEY": "your_secret_key"');
+  console.error('  "KLING_API_KEY": "your_api_key"');
   console.error('}');
-  console.error('\nTo get your keys:');
-  console.error('1. Go to klingai.com developer console');
-  console.error('2. Create a new API key');
-  console.error('3. Copy both Access Key and Secret Key');
+  console.error('\nTo get your key:');
+  console.error('1. Go to kling.ai/dev/api-key');
+  console.error('2. Click "+ Create a new API Key"');
+  console.error('3. Copy the key (shown only once)');
   process.exit(1);
 }
 
-// Initialize Kling client with access key and secret key
-// JWT will be generated fresh for each request
-const klingClient = new KlingClient(KLING_ACCESS_KEY, KLING_SECRET_KEY);
+const klingClient = new KlingClient(KLING_API_KEY);
 
 const server = new Server(
   {

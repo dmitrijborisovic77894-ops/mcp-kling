@@ -67,7 +67,7 @@ export async function uploadFromUrl(imageUrl: string): Promise<string> {
       try {
         const response = await axios.get(imageUrl, { responseType: 'arraybuffer' });
         const buffer = Buffer.from(response.data);
-        const contentType = response.headers['content-type'] || 'image/png';
+        const contentType = String(response.headers['content-type'] || 'image/png');
         const extension = mime.extension(contentType) || 'png';
         const fileName = `downloaded-${Date.now()}.${extension}`;
 
