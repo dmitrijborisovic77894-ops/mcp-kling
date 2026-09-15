@@ -13,3 +13,14 @@ yarn-error.log*
 *.swo
 *~
 test-upload.ts
+
+# YouTube uploader secrets (not part of the mcp-kling server)
+client_secret.json
+token.json
+__pycache__/
+
+# Local test/reference media dropped into this folder
+*.mp4
+*.png
+*.jpg
+*.jpeg

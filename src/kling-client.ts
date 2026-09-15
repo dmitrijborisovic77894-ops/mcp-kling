@@ -22,7 +22,7 @@ export interface CameraControl {
 export interface VideoGenerationRequest {
   prompt: string;
   negative_prompt?: string;
-  model_name?: 'kling-v1' | 'kling-v1.5' | 'kling-v1.6' | 'kling-v2-master';
+  model_name?: 'kling-v2-5-turbo' | 'kling-v2-6' | 'kling-v3';
   aspect_ratio?: '16:9' | '9:16' | '1:1';
   duration?: '5' | '10';
   mode?: 'standard' | 'professional';
@@ -55,7 +55,7 @@ export interface TaskStatus {
 export interface VideoExtensionRequest {
   task_id: string;
   prompt: string;
-  model_name?: 'kling-v1' | 'kling-v1.5' | 'kling-v1.6' | 'kling-v2-master';
+  model_name?: 'kling-v2-5-turbo' | 'kling-v2-6' | 'kling-v3';
   duration?: '5';
   mode?: 'standard' | 'professional';
 }
@@ -66,20 +66,20 @@ export interface LipsyncRequest {
   tts_text?: string;
   tts_voice?: string;
   tts_speed?: number;
-  model_name?: 'kling-v1' | 'kling-v1.5' | 'kling-v1.6' | 'kling-v2-master';
+  model_name?: 'kling-v2-5-turbo' | 'kling-v2-6' | 'kling-v3';
 }
 
 export interface VideoEffectsRequest {
   image_urls: string[];
   effect_scene: 'hug' | 'kiss' | 'heart_gesture' | 'squish' | 'expansion' | 'fuzzyfuzzy' | 'bloombloom' | 'dizzydizzy';
   duration?: '5' | '10';
-  model_name?: 'kling-v1' | 'kling-v1.5' | 'kling-v1.6' | 'kling-v2-master';
+  model_name?: 'kling-v2-5-turbo' | 'kling-v2-6' | 'kling-v3';
 }
 
 export interface ImageGenerationRequest {
   prompt: string;
   negative_prompt?: string;
-  model_name?: 'kling-v1' | 'kling-v1.5' | 'kling-v1.6' | 'kling-v2-master';
+  model_name?: 'kling-v2-5-turbo' | 'kling-v2-6' | 'kling-v3';
   aspect_ratio?: '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '2:3' | '3:2';
   num_images?: number;
   ref_image_url?: string;
@@ -129,16 +129,6 @@ export default class KlingClient {
     });
   }
 
-  // Kling's API expects dashes in these model names (kling-v1-5, kling-v1-6),
-  // but the tool schemas use dots (kling-v1.5, kling-v1.6) to match Kling's own docs elsewhere.
-  private normalizeModelName(modelName: string): string {
-    const dotToDash: Record<string, string> = {
-      'kling-v1.5': 'kling-v1-5',
-      'kling-v1.6': 'kling-v1-6',
-    };
-    return dotToDash[modelName] || modelName;
-  }
-
   private async processImageUrl(url: string | undefined): Promise<string | undefined> {
     if (!url) return undefined;
     
@@ -167,7 +157,7 @@ export default class KlingClient {
       cfg_scale: request.cfg_scale || 0.8,
       aspect_ratio: request.aspect_ratio || '16:9',
       duration: request.duration || '5',
-      model_name: this.normalizeModelName(request.model_name || 'kling-v2-master'), // V2-master is default
+      model_name: request.model_name || 'kling-v3', // kling-v3 is default
       ...(request.image_url && { image_url: request.image_url }),
       ...(request.image_tail_url && { image_tail_url: request.image_tail_url }),
       ...(ref_image_url && { ref_image_url }),
@@ -205,7 +195,7 @@ export default class KlingClient {
       cfg_scale: request.cfg_scale || 0.8,
       duration: request.duration || '5',
       aspect_ratio: request.aspect_ratio || '16:9',
-      model_name: this.normalizeModelName(request.model_name || 'kling-v2-master'), // V2-master is default
+      model_name: request.model_name || 'kling-v3', // kling-v3 is default
     };
 
     try {
@@ -241,7 +231,7 @@ export default class KlingClient {
       prompt: request.prompt,
       duration: request.duration || '5',
       mode: request.mode || 'standard',
-      model_name: this.normalizeModelName(request.model_name || 'kling-v2-master'), // V2-master is default
+      model_name: request.model_name || 'kling-v3', // kling-v3 is default
     };
 
     try {
@@ -347,7 +337,7 @@ export default class KlingClient {
     };
     
     // Always add model_name
-    body.input.model_name = this.normalizeModelName(request.model_name || 'kling-v2-master');
+    body.input.model_name = request.model_name || 'kling-v3';
 
     try {
       const response = await this.axiosInstance.post(path, body);
@@ -376,7 +366,7 @@ export default class KlingClient {
     };
     
     // Always add model_name
-    body.model_name = this.normalizeModelName(request.model_name || 'kling-v2-master');
+    body.model_name = request.model_name || 'kling-v3';
 
     try {
       const response = await this.axiosInstance.post(path, body);
